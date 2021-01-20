@@ -1,0 +1,4 @@
+name = "Mavlink"
+uuid = "6552f673-1c94-4e4d-b9be-47eaec4b92d0"
+authors = ["Brian <bjack205@gmail.com>"]
+version = "0.1.0"
