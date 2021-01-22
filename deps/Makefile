@@ -10,5 +10,8 @@ lib: $(SOURCES)
 main: $(SOURCES)
 	$(CC) $(CFLAGS) -o main $(SOURCES)
 
+sockets:
+	$(CC) $(CFLAGS) -o sockets sockets.c
+
 clean:
 	rm *.so

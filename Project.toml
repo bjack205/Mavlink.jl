@@ -2,3 +2,6 @@ name = "Mavlink"
 uuid = "6552f673-1c94-4e4d-b9be-47eaec4b92d0"
 authors = ["Brian <bjack205@gmail.com>"]
 version = "0.1.0"
+
+[deps]
+Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"

@@ -54,10 +54,20 @@ uint16_t local_position_ned_encode(uint8_t system_id, uint8_t component_id, mavl
     return mavlink_msg_local_position_ned_encode(system_id, component_id, msg, data);
 }
 
+void local_position_ned_decode(mavlink_message_t* msg,
+                               mavlink_local_position_ned_t* data) {
+    mavlink_msg_local_position_ned_decode(msg, data);
+}
+
 
 uint16_t heartbeat_encode(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg, 
                                mavlink_heartbeat_t* data) {
     return mavlink_msg_heartbeat_encode(system_id, component_id, msg, data);
+}
+
+void heartbeat_decode(mavlink_message_t* msg,
+                               mavlink_heartbeat_t* data) {
+    mavlink_msg_heartbeat_decode(msg, data);
 }
 
 uint16_t sys_status_encode(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg,
@@ -65,13 +75,39 @@ uint16_t sys_status_encode(uint8_t system_id, uint8_t component_id, mavlink_mess
     mavlink_msg_sys_status_encode(system_id, component_id, msg, data);
 }
 
+void sys_status_decode(mavlink_message_t* msg,
+                               mavlink_sys_status_t* data) {
+    mavlink_msg_sys_status_decode(msg, data);
+}
+
 uint16_t attitude_encode(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg,
                                mavlink_attitude_t* data) {
     mavlink_msg_attitude_encode(system_id, component_id, msg, data);
 }
 
+void attitude_decode(mavlink_message_t* msg,
+                               mavlink_attitude_t* data) {
+    mavlink_msg_attitude_decode(msg, data);
+}
+
 uint16_t to_send_buffer(uint8_t *buf, const mavlink_message_t *msg) {
     return mavlink_msg_to_send_buffer(buf, msg);
+}
+
+int8_t parse_msg(uint8_t chan, ssize_t recsize, 
+        uint8_t buf[], mavlink_message_t* msg, mavlink_status_t* status)
+{
+    int8_t success = 0;
+    uint8_t temp = 0;
+    for (int i = 0; i < recsize; ++i)
+    {
+        if (mavlink_parse_char(chan, buf[i], msg, status))
+        {
+            // Packet received
+            success = 1;
+        }
+    }
+    return success;
 }
 
 
@@ -100,6 +136,7 @@ int main() {
         printf("  %d\n", buf[i]);
     }
 
+    printf("Size of Status: %ld\n", sizeof(struct __mavlink_status));
 
     return 0;
 }

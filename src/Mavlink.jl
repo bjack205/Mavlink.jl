@@ -4,11 +4,27 @@ const MAVLINK_MAX_PAYLOAD = 255
 const MAVLINK_NUM_CHECKSUM_BYTES = 2
 const MAVLINK_SIGNATURE_BLOCK_LEN = 13
 const libmavlink = joinpath(@__DIR__,"..","deps","libmavlink.so")
+const MESSAGE_TYPES = (:local_position_ned, :sys_status, :attitude, :heartbeat)
+const STATUS_SIZE = 40
 
 const MAVLINK_BUFFER_SIZE = (MAVLINK_MAX_PAYLOAD + MAVLINK_NUM_CHECKSUM_BYTES + 7) ÷ 8
 const PAYLOAD_IDX_TERM = 13+8*(MAVLINK_BUFFER_SIZE)-1
 const BOOT_TIME = time() 
 const MSG_SIZE = 12 + MAVLINK_BUFFER_SIZE*8 + 2 + 13
+
+const MESSAGE_ID = Dict(
+    0 => :heartbeat,
+    1 => :sys_status,
+    30 => :attitude,
+    32 => :local_position_ned,
+)
+const ByteVec = Vector{UInt8}
+
+include("utils.jl")
+include("sockets.jl")
+include("messages.jl")
+
+export CSockets
 
 boottime_ms() = UInt32(round((time() - BOOT_TIME)*1000))
 
@@ -47,7 +63,8 @@ MavlinkMessage(::Type{UInt8}) = Vector{UInt8}(undef, MSG_SIZE)
         seq            = arr[7]
         sysid          = arr[8] 
         compid         = arr[9]  
-        msgid = UInt32(arr[10]) + (UInt32(arr[11]) << 8) + (UInt32(arr[12]) << 16)
+        # msgid = UInt32(arr[10]) + (UInt32(arr[11]) << 8) + (UInt32(arr[12]) << 16)
+        msgid = _msgid(arr)
 
         pay = reinterpret(UInt64, view(arr, 13:PAYLOAD_IDX_TERM))
         payload = tuple($(pay_...))
@@ -57,51 +74,85 @@ MavlinkMessage(::Type{UInt8}) = Vector{UInt8}(undef, MSG_SIZE)
             sysid, compid, msgid, payload, ck, signature)
     end
 end
+_msgid(msg::Vector{UInt8}) = UInt32(msg[10]) + (UInt32(msg[11]) << 8) + (UInt32(msg[12]) << 16)
+msgid(msg::MavlinkMessage) = MESSAGE_ID[msg.msgid]
+msgid(msg::Vector{UInt8}) = MESSAGE_ID[_msgid(msg)] 
 
-abstract type MavlinkMsg end
-struct LocalPositionNed <: MavlinkMsg
-    time_boot_ms::UInt32
-    x::Float32
-    y::Float32
-    z::Float32
-    vx::Float32
-    vy::Float32
-    vz::Float32
+# struct MavlinkStatus
+#     msg_received::UInt8
+#     buffer_overrun::UInt8
+#     parse_error::UInt8
+#     parse_state
+#     packet_idx::UInt8
+#     current_rx_seq::UInt8
+#     current_tx_seq::UInt8
+#     packet_rx_success_count::UInt16
+#     packet_rx_drop_count::UInt16
+#     flags::UInt8
+#     signature_wait::UInt8
+#     signing::MavlinkSigning
+#     signing_streams::MavlinkSigningStreams
+# end
+mavlink_status() = zeros(UInt8, STATUS_SIZE) 
+
+for msg in MESSAGE_TYPES
+    Msg = Symbol(camelcase(msg))
+    encodefn = string(msg) * "_encode"
+    decodefn = string(msg) * "_decode"
+    @eval begin
+        function mavlinkname(::$Msg)
+            return $(string(msg))
+        end
+        function encode!(marr::Vector{UInt8}, data::$Msg,
+                system_id = 1, component_id = 1
+            )
+            ccall(($encodefn, libmavlink), UInt16, 
+                (UInt8, UInt8, Ref{UInt8}, Ref{$Msg}),
+                system_id, component_id, marr, data
+            )
+        end
+        function decode!(marr::Vector{UInt8}, data::$Msg)
+            ccall(($decodefn, libmavlink), Cvoid,
+                (Ref{UInt8}, Ref{$Msg}),
+                marr, data
+            )
+        end
+    end
 end
 
-struct Heartbeat <: MavlinkMsg
-    custom_mode::UInt32
-    type::UInt8
-    autopilot::UInt8
-    base_mode::UInt8
-    system_status::UInt8
-    mavlink_version::UInt8
+function decode(msg::ByteVec)
+    Msg = eval(camelcase(msgid(msg)))()
+    decode!(msg, Msg)
+    return Msg
 end
 
-struct Attitude <: MavlinkMsg
-    time_boot_ms::UInt32
-    roll::Cfloat
-    pitch::Cfloat
-    yaw::Cfloat
-    rollspeed::Cfloat
-    pitchspeed::Cfloat
-    yawspeed::Cfloat
+function parse_message(recsize::Integer, buf::ByteVec, msg::ByteVec, status::ByteVec=mavlink_status(); chan=0)
+    ccall((:parse_msg, Mavlink.libmavlink), Int8, 
+        (UInt8, Cssize_t, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}),
+        chan, recsize, buf, msg, status
+    )
 end
 
-struct SysStatus <: MavlinkMsg
-    onboard_control_sensors_present::UInt32
-    onboard_control_sensors_enabled::UInt32
-    onboard_control_sensors_health::UInt32
-    load::UInt16
-    voltage_battery::UInt16
-    current_battery::Int16
-    drop_rate_comm::UInt16
-    errors_comm::UInt16
-    errors_count1::UInt16
-    errors_count2::UInt16
-    errors_count3::UInt16
-    errors_count4::UInt16
-    battery_remaining::Int8
+function send(sock::Int32, addr::CSockets.SockAddrIn, data::MavlinkMsg, 
+        msg=MavlinkMessage(UInt8); component_id=1, system_id=1)
+    Mavlink.encode!(msg, data, component_id=component_id, system_id=system_id)
+    CSockets.sendto(sock, msg, addr)
+end
+
+function receive!(sock::Int32, addr::CSockets.SockAddrIn, data::MavlinkMsg, 
+        buf::ByteVec=MavlinkMessage(UInt8), msg::ByteVec=MavlinkMessage(UInt8), 
+        status=mavlink_status()
+    )
+    recsize = CSockets.recvfrom(sock, buf, addr);
+
+    # get mavlink message from buffer
+    ccall((:parse_msg, Mavlink.libmavlink), Int8, 
+        (UInt8, Cssize_t, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}),
+        0, recsize, buf, msg, status
+    )
+
+    # decode message into data type
+    Mavlink.decode!(msg, data)
 end
 
 end # module

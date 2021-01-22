@@ -1,47 +1,34 @@
 using BenchmarkTools
 using Mavlink
-import Mavlink: libmavlink, MavlinkMessage, LocalPositionNed, Attitude, SysStatus, Heartbeat
+import Mavlink: libmavlink
+import Mavlink: MavlinkMessage, LocalPositionNed, Attitude, SysStatus, Heartbeat
 
-const MESSAGE_TYPES = (:local_position_ned, :sys_status, :attitude, :heartbeat)
-function camelcase(s::AbstractString, delim="_")
-    join(uppercasefirst.(split(s, delim)))
-end
-camelcase(s::Symbol) = Symbol(camelcase(string(s)))
-
-for msg in MESSAGE_TYPES
-    Msg = Symbol(camelcase(msg))
-    encodefn = string(msg) * "_encode"
-    @eval begin
-        function mavlinkname(::$Msg)
-            return $(string(msg))
-        end
-        function encode!(marr::Vector{UInt8}, data::$Msg;
-                system_id = 1, component_id = 1
-            )
-            ccall(($encodefn, libmavlink), UInt16, 
-                (UInt8, UInt8, Ref{UInt8}, Ref{$Msg}),
-                system_id, component_id, marr, data
-            )
-        end
-    end
-end
+##
 pos = LocalPositionNed(10,1,2,3,4,5,6)
 att = Attitude(10,1,2,3,4,5,6)
 sys = SysStatus(0,0,0,0,0,0,0,0,0,0,0,0,0)
 hbt = Heartbeat(0,0,0,0,0,0)
 marr = MavlinkMessage(UInt8)
-mavlinkname(pos) == "local_position_ned"
-mavlinkname(att) == "attitude"
-mavlinkname(sys) == "sys_status"
-mavlinkname(hbt) == "heartbeat"
-encode!(marr, pos, component_id=2)
+Mavlink.mavlinkname(pos) == "local_position_ned"
+Mavlink.mavlinkname(att) == "attitude"
+Mavlink.mavlinkname(sys) == "sys_status"
+Mavlink.mavlinkname(hbt) == "heartbeat"
+Mavlink.encode!(marr, pos, component_id=2)
 msg = MavlinkMessage(marr)
 msg.sysid == 1
 msg.compid == 2
 
-encode!(marr, att, component_id=2)
-encode!(marr, sys, component_id=2)
-encode!(marr, hbt, component_id=2)
+Mavlink.encode!(marr, att, component_id=2)
+Mavlink.encode!(marr, sys, component_id=2)
+Mavlink.encode!(marr, hbt, component_id=2)
+
+pos2 = LocalPositionNed(0,0,0,0,0,0,0)
+Mavlink.encode!(marr, pos, component_id=2)
+Mavlink.decode!(marr, pos2)
+for i = 1:fieldcount(LocalPositionNed)
+    getfield(pos,i) == getfield(pos2,i)
+end
+
 
 ##
 ccall((:main, libmavlink), Cint, ())

@@ -28,3 +28,30 @@ void print_addr(struct sockaddr_in* addr) {
     printf("port: %d\n", addr->sin_port);
     printf("address: %d\n", addr->sin_addr.s_addr);
 }
+
+#define BUFFER_LENGTH 2041
+
+int main() {
+    int sock = udp_socket();
+    struct sockaddr_in gcAddr;
+	memset(&gcAddr, 0, sizeof(gcAddr));
+    gcAddr.sin_family = AF_INET;
+    gcAddr.sin_port = htons(14550);
+    gcAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    char buf[BUFFER_LENGTH];
+    ssize_t recsize;
+	socklen_t fromlen = sizeof(gcAddr);
+	printf("GC Address: %d\n", gcAddr.sin_addr.s_addr);
+	printf("GC Port: %d\n", gcAddr.sin_port);
+    printf("fromlen: %d\n", fromlen);
+
+    for (;;) {
+        memset(buf, 0, BUFFER_LENGTH);
+		recsize = recvfrom(sock, (void *)buf, BUFFER_LENGTH, 0, (struct sockaddr *)&gcAddr, &fromlen);
+        printf("Received %ld bytes\n", recsize);
+    }
+    
+
+    return 0;
+}

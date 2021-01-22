@@ -1,3 +1,5 @@
 c_library_v2
 *.so
 main
+test/mavlink_udp
+deps/sockets
