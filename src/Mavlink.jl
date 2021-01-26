@@ -4,7 +4,6 @@ const MAVLINK_MAX_PAYLOAD = 255
 const MAVLINK_NUM_CHECKSUM_BYTES = 2
 const MAVLINK_SIGNATURE_BLOCK_LEN = 13
 const libmavlink = joinpath(@__DIR__,"..","deps","libmavlink.so")
-const MESSAGE_TYPES = (:local_position_ned, :sys_status, :attitude, :heartbeat)
 const STATUS_SIZE = 40
 
 const MAVLINK_BUFFER_SIZE = (MAVLINK_MAX_PAYLOAD + MAVLINK_NUM_CHECKSUM_BYTES + 7) ÷ 8
@@ -12,12 +11,6 @@ const PAYLOAD_IDX_TERM = 13+8*(MAVLINK_BUFFER_SIZE)-1
 const BOOT_TIME = time() 
 const MSG_SIZE = 12 + MAVLINK_BUFFER_SIZE*8 + 2 + 13
 
-const MESSAGE_ID = Dict(
-    0 => :heartbeat,
-    1 => :sys_status,
-    30 => :attitude,
-    32 => :local_position_ned,
-)
 const ByteVec = Vector{UInt8}
 
 include("utils.jl")
@@ -95,10 +88,10 @@ msgid(msg::Vector{UInt8}) = MESSAGE_ID[_msgid(msg)]
 # end
 mavlink_status() = zeros(UInt8, STATUS_SIZE) 
 
-for msg in MESSAGE_TYPES
+for msg in values(MESSAGE_ID) 
     Msg = Symbol(camelcase(msg))
-    encodefn = string(msg) * "_encode"
-    decodefn = string(msg) * "_decode"
+    encodefn = "mavlink_msg_" * string(msg) * "_encode"
+    decodefn = "mavlink_msg_" * string(msg) * "_decode"
     @eval begin
         function mavlinkname(::$Msg)
             return $(string(msg))
