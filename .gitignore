@@ -1,4 +1,4 @@
-c_library_v2
+include
 *.so
 main
 test/mavlink_udp

@@ -1,7 +1,7 @@
 CC=gcc
 
 SOURCES=mavlib.c
-CFLAGS=-I ./c_library_v2/common
+CFLAGS=-I ./include/common
 OBJECTS=$(SOURCES:.c=.o)
 
 lib: $(SOURCES)
