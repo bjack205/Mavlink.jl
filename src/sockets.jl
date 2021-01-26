@@ -4,6 +4,7 @@ module CSockets
 using Sockets
 const libsockets = joinpath(@__DIR__, "..","deps","sockets.so")
 const AF_INET = 2
+const ByteVec = Vector{UInt8}
 
 struct Hertz end
 Base.:*(time::Real, ::Hertz) = 1/time
@@ -105,8 +106,10 @@ end
 
 Create a UDP C socket
 """
-function udpsocket() 
-    ccall((:udp_socket, libsockets), Cint, ())
+function udpsocket(; reuse::Bool=true) 
+    socket = ccall((:udp_socket, libsockets), Cint, ())
+    reuse && reuse_socket(socket)
+    return socket
 end
 
 """
@@ -114,8 +117,16 @@ end
 
 Create a TCP C socket
 """
-function tcpsocket()
-    ccall((:tcp_socket, libsockets), Cint, ())
+function tcpsocket(; reuse::Bool=true)
+    socket = ccall((:tcp_socket, libsockets), Cint, ())
+    reuse && reuse_socket(socket)
+    return socket
+end
+
+function reuse_socket(socket::Int32)
+    if ccall((:reuse, libsockets), Cint, (Cint,), socket) != 0
+        @warn "Failed to set socket options."
+    end
 end
 
 """
@@ -128,6 +139,19 @@ function bind(socket::Int32, addr::SockAddrIn)
         (Cint, Ref{UInt8}), socket, addr.bytes
     )
 end
+
+function listen(socket::Int32, backlog::Integer=Int32(3))
+    ccall((:listen, libsockets), Cint, (Cint, Cint), socket, Int32(backlog))
+end
+
+function accept(socket::Int32, addr::SockAddrIn)
+    ccall((:accept_client, libsockets), Cint, (Cint, Ref{UInt8}), socket, addr.bytes)
+end
+
+function connect(socket::Int32, addr::SockAddrIn)
+    ccall((:connect_to_server, libsockets), Cint, (Cint, Ref{UInt8}), socket, addr.bytes)
+end
+
 
 # WARNING: this allocates!
 @inline sendto(socket::Int32, msg::String, addr::SockAddrIn; kwargs...) = 
@@ -155,6 +179,13 @@ function sendto(socket::Int32, msg::Vector{UInt8}, addr::SockAddrIn;
     )
 end
 
+function send(socket::Int32, msg::ByteVec; len=length(msg), flags = Cint(0))
+    ccall((:send, libsockets), Cssize_t, 
+        (Cint, Ref{UInt8}, Csize_t, Cint),
+        socket, msg, len, flags
+    )
+end
+
 """
     recvfrom(socket, buf, addr; kwargs...)
 
@@ -170,8 +201,11 @@ function recvfrom(socket::Int32, buf::Vector{UInt8}, addr::SockAddrIn;
     )
 end
 
-function listen(socket::Int32, backlog::Int32=Int32(3))
-    ccall((:listen, libsockets), Cint, (Cint, Cint), socket, backlog)
+function recv(socket::Int32, buf::ByteVec; len=length(buf), flags = Cint(0))
+    ccall((:recv, libsockets), Cssize_t, 
+        (Cint, Ref{UInt8}, Csize_t, Cint),
+        socket, buf, len, flags
+    )
 end
 
 """
@@ -183,5 +217,6 @@ debugging purposes.
 function printaddr(addr::SockAddrIn)
     ccall((:print_addr, libsockets), Cvoid, (Ref{UInt8},), addr.bytes)
 end
+
 
 end
