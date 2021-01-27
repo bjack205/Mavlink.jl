@@ -10,6 +10,14 @@ struct Hertz end
 Base.:*(time::Real, ::Hertz) = 1/time
 const Hz = Hertz()
 
+import Sockets.@ip_str
+
+export 
+    @timeat, 
+    Hz,
+    SockAddrIn,
+    @ip_str
+
 """
     @timeat expr time
 
@@ -35,7 +43,6 @@ macro timeat(expr::Expr, time)
         t_used < $time && sleep($time - t_used)
     end)
 end
-export @timeat, Hz
 
 """
     getbyte(x,i)
@@ -218,5 +225,27 @@ function printaddr(addr::SockAddrIn)
     ccall((:print_addr, libsockets), Cvoid, (Ref{UInt8},), addr.bytes)
 end
 
-
+const POLLIN = 1
+mutable struct Poll
+    fd::Cint
+    events::Cshort
+    revents::Cshort
 end
+
+Poll(socket::Integer) = Poll(socket, POLLIN, 0)
+
+function poll(fd::Poll, timeout_ms::Integer)
+    ccall((:poll, libsockets), Cint,
+        (Ref{Poll}, Culong, Cint),
+        Ref(fd), 1, timeout_ms
+    )
+end
+
+function poll(fds::Vector{Poll}, timeout_ms::Integer)
+    ccall((:poll, libsockets), Cint,
+        (Ref{Poll}, Culong, Cint),
+        fd, length(fds), timeout_ms
+    )
+end
+
+end  # module

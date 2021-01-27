@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <sys/poll.h>
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <string.h>
@@ -68,6 +69,8 @@ void test_udp(int port) {
         printf("Received %ld bytes\n", recsize);
     }
 }
+
+
 
 void test_tcp_server(int port) {
     // Create socket
@@ -154,7 +157,9 @@ void test_tcp_client(int port) {
 }
 
 int main() {
-    // test_tcp_server(8002);
-    test_tcp_client(7000);
+    // test_tcp_server(4560);
+    // test_tcp_client(7000);
+    printf("POLLIN val: %d\n", POLLIN);
+    printf("size of nfds_t: %ld\n", sizeof(nfds_t));
     return 0;
 }
