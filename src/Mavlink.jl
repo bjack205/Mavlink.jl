@@ -104,7 +104,7 @@ for msg in values(MESSAGE_ID)
                 system_id, component_id, marr, data
             )
         end
-        function decode!(marr::Vector{UInt8}, data::$Msg)
+        function decode!(data::$Msg, marr::Vector{UInt8})
             ccall(($decodefn, libmavlink), Cvoid,
                 (Ref{UInt8}, Ref{$Msg}),
                 marr, data
@@ -126,10 +126,16 @@ function parse_message(recsize::Integer, buf::ByteVec, msg::ByteVec, status::Byt
     )
 end
 
-function send(sock::Int32, addr::CSockets.SockAddrIn, data::MavlinkMsg, 
+function sendto(sock::Int32, addr::CSockets.SockAddrIn, data::MavlinkMsg, 
         msg=MavlinkMessage(UInt8); component_id=1, system_id=1)
     Mavlink.encode!(msg, data, component_id=component_id, system_id=system_id)
     CSockets.sendto(sock, msg, addr)
+end
+
+function send(sock::Int32, data::MavlinkMsg, msg=MavlinkMessage(UInt8); 
+        component_id=1, system_id=1)
+    Mavlink.encode!(msg, data, component_id, system_id)
+    CSockets.send(sock, msg)
 end
 
 function receive!(sock::Int32, addr::CSockets.SockAddrIn, data::MavlinkMsg, 
@@ -145,7 +151,35 @@ function receive!(sock::Int32, addr::CSockets.SockAddrIn, data::MavlinkMsg,
     )
 
     # decode message into data type
-    Mavlink.decode!(msg, data)
+    decode!(data, msg)
+end
+
+function receive!(sock::Int32, data::MavlinkMsg, buf::ByteVec=MavlinkMessage(UInt8),
+        msg::ByteVec=MavlinkMessage(UInt8), status=mavlink_status())
+    recsize = CSockets.recv(sock, buf)
+
+    # get mavlink message from buffer
+    parse!(recsize, msg, buf, status)
+
+    # decode the message into data type
+    decode!(data, msg)
+    return data
+end
+
+"""
+    parse!(recsize, msg, buf, [status])
+
+Parse the first `recsize` bytes of `buf` into a MavlinkMessage byte vector `msg`, 
+which can subsequently be decoded into an individual message type via `Mavlink.decode!`.
+
+The optional `status` argument provides a byte vector for storing information about the 
+parsing process, corresponding to the `mavlink_status_t` type in C.
+"""
+function parse!(recsize::Integer, msg::ByteVec, buf::ByteVec, status=mavlink_status())
+    ccall((:parse_msg, Mavlink.libmavlink), Int8, 
+        (UInt8, Cssize_t, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}),
+        0, recsize, buf, msg, status
+    )
 end
 
 end # module
