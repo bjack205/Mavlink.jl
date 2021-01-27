@@ -248,4 +248,32 @@ function poll(fds::Vector{Poll}, timeout_ms::Integer)
     )
 end
 
+function recv_poll(socket::Int32, buf::ByteVec, 
+        timeout_ms::Integer, fd::Poll=Poll(socket);
+        verbose::Bool=false
+    )
+    @assert socket === fd.fd
+    p = poll(fd, timeout_ms)
+    if p > 0
+        if fd.revents == POLLIN  # new message
+            p = CSockets.recv(socket, buf)
+        end
+    elseif p == 0
+        verbose && @warn "poll timeout"
+    else
+        verbose && error("Poll error")     
+    end
+    return p
+end
+
+function poll_recv(fd::Poll, buf::ByteVec, timeout_ms::Integer)::Cint
+    p = poll(fd, timeout_ms)
+    if p > 0
+        if fd.revents == POLLIN
+            return CSockets.recv(fd.fd, buf)
+        end
+    end
+    return p 
+end
+
 end  # module
